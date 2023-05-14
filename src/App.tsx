@@ -1,35 +1,99 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+// export default App;
+import React, { useState, useEffect, useRef } from "react";
+import socketIOClient, {Socket} from "socket.io-client";
+import { myMessages } from "./interfaces/myMessages.ts";
+import MessagesList from "./components/MessagesList";
+import "./App.css";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [message, setMessage] = useState("");
+  const [myMessagesList, setMyMessagesList] = useState<myMessages[]>([]);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const scroll = useRef<HTMLDivElement>(null);
+  const urlBackend = "https://my-chat-app-y6dn.onrender.com/"
+
+
+  useEffect(() => {
+  
+    const newSocket = socketIOClient(urlBackend);
+    setSocket(newSocket);
+
+    newSocket.on("message", (data: { message: string; id: string }) => {
+      console.log(data.message);
+      setMyMessagesList((prevMessages) => [
+        ...prevMessages,
+        {
+          id: window.crypto.randomUUID(),
+          message: data.message,
+          createdAt: new Date(),
+          client: false,
+          senderId: data.id,
+        },
+      ]);
+    });
+
+    return () => {
+      newSocket.disconnect();
+    };
+  }, []);
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setMessage(event.target.value);
+  };
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (message === "") {
+      alert("Please enter a message");
+      return;
+    }
+
+    if (socket) {
+      socket.emit("message", { message, id: socket.id });
+    }
+
+    setMyMessagesList((prevMessages) => [
+      ...prevMessages,
+      {
+        id: window.crypto.randomUUID(),
+        message,
+        createdAt: new Date(),
+        client: true,
+        senderId: socket ? socket.id : "",
+      },
+    ]);
+
+    setMessage("");
+  };
+
+  useEffect(() => {
+    // Hacer scroll hacia abajo después de cada actualización de messages
+    if (scroll.current) {
+      scroll.current.scrollTop = scroll.current.scrollHeight;
+    }
+  }, [myMessagesList]);
 
   return (
-    <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="App">
+      <h1 className="title">My Chat</h1>
+      <div className="messages-container" ref={scroll}>
+        <MessagesList myMessagesList={myMessagesList} />
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
+      <div className="form-container">
+        <h2 className="subtitle">Send messages</h2>
+        <form onSubmit={handleSubmit} className="form">
+          <input
+            type="text"
+            value={message}
+            onChange={handleChange}
+            placeholder="Send your message"
+          />
+          <button type="submit">Send</button>
+        </form>
       </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    </div>
+  );
 }
 
-export default App
+export default App;
